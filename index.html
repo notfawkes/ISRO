@@ -343,7 +343,7 @@
     function getAQI(pm25) {
       if (pm25 === null || isNaN(pm25)) return {aqi: 'NA', color: '#888', label: 'NA'};
       if (pm25 <= 50) return {aqi: pm25, color: '#00e400', label: 'Good'};
-      if (pm25 <= 100) return {aqi: pm25, color: '#ffff00', label: 'Moderate'};
+      if (pm25 <= 100) return {aqi: pm25, color: '#ba8e23', label: 'Moderate'};
       if (pm25 <= 150) return {aqi: pm25, color: '#ff7e00', label: 'Unhealthy for Sensitive'};
       if (pm25 <= 200) return {aqi: pm25, color: '#ff0000', label: 'Unhealthy'};
       if (pm25 <= 300) return {aqi: pm25, color: '#99004c', label: 'Very Unhealthy'};
@@ -355,14 +355,14 @@
       value = parseFloat(value);
       if (pollutant === 'PM2.5') {
         if (value <= 30) return '#00e400';
-        if (value <= 60) return '#ffff00';
+        if (value <= 60) return '#ba8e23';
         if (value <= 90) return '#ff7e00';
         if (value <= 120) return '#ff0000';
         return '#99004c';
       }
       if (pollutant === 'PM10') {
         if (value <= 50) return '#00e400';
-        if (value <= 100) return '#ffff00';
+        if (value <= 100) return '#ba8e23';
         if (value <= 250) return '#ff7e00';
         if (value <= 350) return '#ff0000';
         return '#99004c';
@@ -406,7 +406,7 @@
       dashHtml += `</table>`;
       dashHtml += `<div class='aqi-note'>AQI is estimated from PM2.5 or PM10</div>`;
       dashHtml += `<div class='legend'>`;
-      dashHtml += `<div class='legend-row'><span style='background:#00e400;'></span>0-50 <span style='background:#ffff00;'></span>51-100 <span style='background:#ff7e00;'></span>101-150</div>`;
+      dashHtml += `<div class='legend-row'><span style='background:#00e400;'></span>0-50 <span style='background:#ba8e23;'></span>51-100 <span style='background:#ff7e00;'></span>101-150</div>`;
       dashHtml += `<div class='legend-row'><span style='background:#ff0000;'></span>151-200 <span style='background:#99004c;'></span>201-300 <span style='background:#7e0023;'></span>301+</div>`;
       dashHtml += `</div>`;
       dashboard.innerHTML = dashHtml;
