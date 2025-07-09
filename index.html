@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mumbai Air Quality Dashboard</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    html, body {
+      height: 100vh;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      background: #232733;
+      color: #f1f1f1;
+      font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    body {
+      min-height: 100vh;
+      min-width: 100vw;
+      box-sizing: border-box;
+    }
+    .container {
+      display: flex;
+      flex-direction: row;
+      height: calc(100vh - 56px); /* minus navbar */
+      width: 100%;
+      overflow: hidden;
+      box-sizing: border-box;
+      min-width: 0;
+    }
+    #map {
+      flex: 1.2;
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      border-right: 2px solid #23272f;
+      box-sizing: border-box;
+    }
+    #dashboard {
+      flex: 1;
+      min-width: 0;
+      max-width: 480px;
+      min-height: 0;
+      width: 100%;
+      background: #181c23;
+      color: #f1f1f1;
+      border-radius: 0 0 0 0;
+      box-shadow: 0 4px 32px #000b;
+      z-index: 1000;
+      padding: 38px 32px 24px 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      height: 100%;
+      border-left: 1.5px solid #23272f;
+      transition: opacity 0.2s;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+    #dashboard .close-btn {
+      display: none;
+    }
+    #dashboard .aqi-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+    #dashboard .aqi-num {
+      font-size: 2.8em;
+      font-weight: bold;
+      color: #fff;
+      margin-right: 16px;
+      letter-spacing: 1px;
+    }
+    #dashboard .aqi-badge {
+      font-size: 1.1em;
+      font-weight: bold;
+      border-radius: 12px;
+      padding: 6px 18px;
+      color: #222;
+      margin-left: 2px;
+      box-shadow: 0 1px 4px #0004;
+      display: inline-block;
+    }
+    #dashboard .station-title {
+      font-size: 1.15em;
+      font-weight: bold;
+      margin-bottom: 2px;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+    #dashboard .station-time {
+      margin-bottom: 12px;
+      color: #b0b6c3;
+      font-size: 0.98em;
+    }
+    #dashboard .pollutant-table {
+      width: 100%;
+      font-size: 1.08em;
+      margin-bottom: 12px;
+      background: transparent;
+      color: #f1f1f1;
+      border-collapse: separate;
+      border-spacing: 0 4px;
+    }
+    #dashboard .pollutant-table td {
+      padding: 3px 0 3px 0;
+    }
+    #dashboard .pollutant-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    #dashboard .pollutant-bar {
+      display: inline-block;
+      height: 7px;
+      border-radius: 4px;
+      margin-left: 7px;
+      min-width: 40px;
+      max-width: 80px;
+    }
+    #dashboard .legend {
+      margin-top: 18px;
+      font-size: 0.98em;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      align-items: flex-start;
+    }
+    #dashboard .legend-row {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+    }
+    #dashboard .legend span {
+      display: inline-block;
+      width: 28px;
+      height: 14px;
+      border-radius: 6px;
+      margin-right: 2px;
+      margin-bottom: 2px;
+    }
+    #dashboard .aqi-note {
+      font-size: 0.93em;
+      color: #b0b6c3;
+      margin-bottom: 2px;
+      margin-top: 8px;
+    }
+    @media (max-width: 900px) {
+      .container { flex-direction: column; }
+      #map, #dashboard { width: 100vw; min-width: 0; max-width: 100vw; height: 50vh; }
+      #dashboard { border-radius: 0; border-left: none; border-top: 1.5px solid #23272f; }
+    }
+    #bottom-bar {
+      position: fixed;
+      left: 0;
+      bottom: 0;
+      width: 100vw;
+      background: #181c23;
+      border-top: 2px solid #23272f;
+      box-shadow: 0 -2px 16px #000a;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px 14px 18px;
+      z-index: 2000;
+      border-radius: 0 0 18px 18px;
+    }
+    #bottom-bar input, #bottom-bar select {
+      background: #232733;
+      color: #f1f1f1;
+      border: 1.5px solid #23272f;
+      border-radius: 7px;
+      padding: 8px 14px;
+      font-size: 1em;
+      outline: none;
+      transition: border 0.2s, box-shadow 0.2s;
+    }
+    #bottom-bar input:focus, #bottom-bar select:focus {
+      border: 1.5px solid #3572f7;
+      box-shadow: 0 0 0 2px #3572f755;
+    }
+    #bottom-bar input {
+      flex: 2;
+      min-width: 180px;
+    }
+    #bottom-bar select {
+      flex: 1;
+      min-width: 140px;
+    }
+    #bottom-bar button {
+      background: #3572f7;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 9px 22px;
+      font-size: 1em;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+      box-shadow: 0 1px 4px #0003;
+    }
+    #bottom-bar button:hover {
+      background: #2858b8;
+      box-shadow: 0 2px 8px #3572f755;
+    }
+    @media (max-width: 900px) {
+      #bottom-bar { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 8px; border-radius: 0 0 12px 12px; }
+      #bottom-bar input, #bottom-bar select, #bottom-bar button { width: 100%; min-width: 0; }
+    }
+    #navbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 56px;
+      background: #181c23;
+      color: #f1f1f1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 32px;
+      z-index: 3000;
+      box-shadow: 0 2px 16px #000a;
+      border-bottom: 2px solid #23272f;
+    }
+    .nav-title {
+      font-size: 1.25em;
+      font-weight: bold;
+      letter-spacing: 0.5px;
+    }
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      min-width: 0;
+    }
+    .nav-link {
+      color: #f1f1f1;
+      text-decoration: none;
+      font-size: 1em;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 6px;
+      transition: background 0.2s, color 0.2s;
+    }
+    .nav-link:hover {
+      background: #232733;
+      color: #3572f7;
+    }
+    .container {
+      margin-top: 56px;
+    }
+    @media (max-width: 900px) {
+      #navbar { padding: 0 10px; }
+      .nav-links { gap: 10px; }
+      .container { margin-top: 56px; }
+    }
+    .aqi-marker {
+      font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+      letter-spacing: 0.5px;
+      transition: transform 0.1s;
+    }
+    .aqi-marker:hover {
+      transform: scale(1.12);
+      z-index: 10;
+      box-shadow: 0 4px 16px #000c;
+    }
+    .leaflet-layer,
+    .leaflet-control-zoom-in,
+    .leaflet-control-zoom-out,
+    .leaflet-control-attribution {
+      filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav id="navbar">
+    <div class="nav-title">Mumbai Air Quality Dashboard</div>
+    <div class="nav-links">
+      <a href="#" class="nav-link">Home</a>
+      <a href="#" class="nav-link">About</a>
+      <a href="#" class="nav-link">Login</a>
+    </div>
+  </nav>
+  <div class="container">
+    <div id="map"></div>
+    <div id="dashboard">
+      <div style="color:#888;text-align:center;margin-top:40px;">Select a station on the map to view air quality details.</div>
+    </div>
+  </div>
+  <!-- Bottom bar for search and filter -->
+  <div id="bottom-bar">
+    <input id="search-location" type="text" placeholder="Search Location (e.g., Chembur)" />
+    <select id="filter-pollutant">
+      <option value="">Filter by Pollutant</option>
+      <option value="PM2.5">PM2.5</option>
+      <option value="PM10">PM10</option>
+      <option value="CO">CO</option>
+      <option value="SO2">SO2</option>
+      <option value="NO2">NO2</option>
+      <option value="OZONE">OZONE</option>
+    </select>
+    <button id="apply-filters">Apply Filters</button>
+  </div>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    var map = L.map('map').setView([19.0760, 72.8777], 11);
+    // Remove the MapTiler Satellite tile layer and use OpenStreetMap
+    map.eachLayer(function(layer){ map.removeLayer(layer); });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    let allMarkers = [];
+    let allStations = {};
+    let selectedStation = null;
+
+    fetch('https://api.data.gov.in/resource/3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69?api-key=579b464db66ec23bdd00000146ec0d3aecf240427510dcf73a5f7ab1&format=json&limit=10000&filters%5Bcountry%5D=India')
+      .then(response => response.json())
+      .then(data => {
+        const stations = {};
+        data.records.forEach(rec => {
+          const key = rec.station;
+          if (!stations[key]) {
+            stations[key] = {
+              lat: parseFloat(rec.latitude),
+              lon: parseFloat(rec.longitude),
+              pollutants: {},
+              last_update: rec.last_update
+            };
+          }
+          stations[key].pollutants[rec.pollutant_id] = rec.avg_value;
+        });
+        allStations = stations;
+        renderMarkers();
+      });
+
+    function getAQI(pm25) {
+      if (pm25 === null || isNaN(pm25)) return {aqi: 'NA', color: '#888', label: 'NA'};
+      if (pm25 <= 50) return {aqi: pm25, color: '#00e400', label: 'Good'};
+      if (pm25 <= 100) return {aqi: pm25, color: '#BA8E23', label: 'Moderate'};
+      if (pm25 <= 150) return {aqi: pm25, color: '#ff7e00', label: 'Unhealthy for Sensitive'};
+      if (pm25 <= 200) return {aqi: pm25, color: '#ff0000', label: 'Unhealthy'};
+      if (pm25 <= 300) return {aqi: pm25, color: '#99004c', label: 'Very Unhealthy'};
+      return {aqi: pm25, color: '#7e0023', label: 'Hazardous'};
+    }
+
+    function getPollutantBarColor(pollutant, value) {
+      if (value === undefined || value === 'NA') return '#444';
+      value = parseFloat(value);
+      if (pollutant === 'PM2.5') {
+        if (value <= 30) return '#00e400';
+        if (value <= 60) return '#BA8E23';
+        if (value <= 90) return '#ff7e00';
+        if (value <= 120) return '#ff0000';
+        return '#99004c';
+      }
+      if (pollutant === 'PM10') {
+        if (value <= 50) return '#00e400';
+        if (value <= 100) return '#BA8E23';
+        if (value <= 250) return '#ff7e00';
+        if (value <= 350) return '#ff0000';
+        return '#99004c';
+      }
+      return '#00bcd4';
+    }
+
+    const pollutantIcons = {
+      'PM2.5': `<svg width='18' height='18' viewBox='0 0 20 20'><circle cx='10' cy='10' r='8' fill='#b0b6c3'/></svg>`,
+      'PM10': `<svg width='18' height='18' viewBox='0 0 20 20'><rect x='4' y='4' width='12' height='12' rx='6' fill='#b0b6c3'/></svg>`,
+      'CO': `<svg width='18' height='18' viewBox='0 0 20 20'><ellipse cx='10' cy='10' rx='8' ry='6' fill='#b0b6c3'/></svg>`,
+      'SO2': `<svg width='18' height='18' viewBox='0 0 20 20'><polygon points='10,3 17,17 3,17' fill='#b0b6c3'/></svg>`,
+      'NO2': `<svg width='18' height='18' viewBox='0 0 20 20'><rect x='5' y='5' width='10' height='10' rx='3' fill='#b0b6c3'/></svg>`,
+      'OZONE': `<svg width='18' height='18' viewBox='0 0 20 20'><circle cx='10' cy='10' r='7' fill='none' stroke='#b0b6c3' stroke-width='3'/></svg>`
+    };
+
+    const dashboard = document.getElementById('dashboard');
+
+    function renderDashboard(station, info) {
+      let pm25 = null;
+      if (info.pollutants['PM2.5'] && info.pollutants['PM2.5'] !== 'NA') {
+        pm25 = parseFloat(info.pollutants['PM2.5']);
+      } else if (info.pollutants['PM10'] && info.pollutants['PM10'] !== 'NA') {
+        pm25 = parseFloat(info.pollutants['PM10']);
+      }
+      const aqiInfo = getAQI(pm25);
+      let dashHtml = '';
+      dashHtml += `<div class='station-title'>${station}</div>`;
+      dashHtml += `<div class='station-time'>${info.last_update}</div>`;
+      dashHtml += `<div class='aqi-row'>`;
+      dashHtml += `<div class='aqi-num' style='color:${aqiInfo.color};'>${aqiInfo.aqi}</div>`;
+      dashHtml += `<span class='aqi-badge' style='background:${aqiInfo.color};'>${aqiInfo.label}</span>`;
+      dashHtml += `</div>`;
+      dashHtml += `<table class='pollutant-table'>`;
+      ['PM2.5','PM10','CO','SO2','NO2','OZONE'].forEach(pollutant => {
+        if (info.pollutants[pollutant]) {
+          const val = info.pollutants[pollutant];
+          dashHtml += `<tr><td class='pollutant-label'>${pollutantIcons[pollutant] || ''}<span>${pollutant}</span></td><td style='text-align:right;'>${val}<span class='pollutant-bar' style='background:${getPollutantBarColor(pollutant, val)};width:${Math.min(80,Math.max(40,parseFloat(val)||0))}px'></span></td></tr>`;
+        }
+      });
+      dashHtml += `</table>`;
+      dashHtml += `<div class='aqi-note'>AQI is estimated from PM2.5 or PM10</div>`;
+      dashHtml += `<div class='legend'>`;
+      dashHtml += `<div class='legend-row'><span style='background:#00e400;'></span>0-50 <span style='background:#BA8E23;'></span>51-100 <span style='background:#ff7e00;'></span>101-150</div>`;
+      dashHtml += `<div class='legend-row'><span style='background:#ff0000;'></span>151-200 <span style='background:#99004c;'></span>201-300 <span style='background:#7e0023;'></span>301+</div>`;
+      dashHtml += `</div>`;
+      dashboard.innerHTML = dashHtml;
+    }
+
+    function renderMarkers() {
+      // Remove all existing markers
+      if (allMarkers.length) {
+        allMarkers.forEach(m => map.removeLayer(m));
+        allMarkers = [];
+      }
+      // Get filter values
+      const searchValue = document.getElementById('search-location').value.trim().toLowerCase();
+      const pollutantValue = document.getElementById('filter-pollutant').value;
+      let foundSelected = false;
+      Object.entries(allStations).forEach(([station, info]) => {
+        // Filter by location
+        if (searchValue && !station.toLowerCase().includes(searchValue)) return;
+        // Filter by pollutant
+        if (pollutantValue && (!info.pollutants[pollutantValue] || info.pollutants[pollutantValue] === 'NA')) return;
+        let pm25 = null;
+        if (info.pollutants['PM2.5'] && info.pollutants['PM2.5'] !== 'NA') {
+          pm25 = parseFloat(info.pollutants['PM2.5']);
+        } else if (info.pollutants['PM10'] && info.pollutants['PM10'] !== 'NA') {
+          pm25 = parseFloat(info.pollutants['PM10']);
+        }
+        const aqiInfo = getAQI(pm25);
+        const iconHtml = `<div class="aqi-marker" style="background:${aqiInfo.color};border:2.5px solid #fff;color:#fff;font-weight:bold;font-size:1em;width:38px;height:38px;display:flex;align-items:center;justify-content:center;border-radius:50%;box-shadow:0 2px 8px #000a;">${aqiInfo.aqi}</div>`;
+        const marker = L.marker([info.lat, info.lon], {
+          icon: L.divIcon({
+            className: '',
+            html: iconHtml,
+            iconSize: [38, 38],
+            iconAnchor: [19, 19]
+          })
+        }).addTo(map);
+        marker.on('click', function() {
+          renderDashboard(station, info);
+          selectedStation = station;
+        });
+        allMarkers.push(marker);
+        if (selectedStation === station) foundSelected = true;
+      });
+      // If the selected station is filtered out, reset dashboard
+      if (!foundSelected) {
+        dashboard.innerHTML = '<div style="color:#888;text-align:center;margin-top:40px;">Select a station on the map to view air quality details.</div>';
+        selectedStation = null;
+      }
+    }
+
+    document.getElementById('apply-filters').addEventListener('click', renderMarkers);
+  </script>
+</body>
+</html> 

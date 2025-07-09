@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Marauders Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 90vh; width: 100vw; }
+    #dashboard {
+      position: fixed;
+      top: 60px;
+      left: 32px;
+      width: 350px;
+      min-height: 380px;
+      max-width: 95vw;
+      background: #181c23;
+      color: #f1f1f1;
+      border-radius: 22px;
+      box-shadow: 0 4px 32px #000b;
+      z-index: 1000;
+      padding: 28px 24px 18px 24px;
+      display: none;
+      font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+      transition: opacity 0.2s;
+      border: 1.5px solid #23272f;
+    }
+    #dashboard .close-btn {
+      position: absolute;
+      top: 12px;
+      right: 22px;
+      color: #aaa;
+      font-size: 1.7em;
+      cursor: pointer;
+      z-index: 10;
+    }
+    #dashboard .aqi-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+    #dashboard .aqi-num {
+      font-size: 2.8em;
+      font-weight: bold;
+      color: #fff;
+      margin-right: 16px;
+      letter-spacing: 1px;
+    }
+    #dashboard .aqi-badge {
+      font-size: 1.1em;
+      font-weight: bold;
+      border-radius: 12px;
+      padding: 6px 18px;
+      color: #222;
+      margin-left: 2px;
+      box-shadow: 0 1px 4px #0004;
+      display: inline-block;
+    }
+    #dashboard .station-title {
+      font-size: 1.15em;
+      font-weight: bold;
+      margin-bottom: 2px;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+    #dashboard .station-time {
+      margin-bottom: 12px;
+      color: #b0b6c3;
+      font-size: 0.98em;
+    }
+    #dashboard .pollutant-table {
+      width: 100%;
+      font-size: 1.08em;
+      margin-bottom: 12px;
+      background: transparent;
+      color: #f1f1f1;
+      border-collapse: separate;
+      border-spacing: 0 4px;
+    }
+    #dashboard .pollutant-table td {
+      padding: 3px 0 3px 0;
+    }
+    #dashboard .pollutant-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    #dashboard .pollutant-bar {
+      display: inline-block;
+      height: 7px;
+      border-radius: 4px;
+      margin-left: 7px;
+      min-width: 40px;
+      max-width: 80px;
+    }
+    #dashboard .legend {
+      margin-top: 18px;
+      font-size: 0.98em;
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #dashboard .legend span {
+      display: inline-block;
+      width: 28px;
+      height: 14px;
+      border-radius: 6px;
+      margin-right: 2px;
+      margin-bottom: 2px;
+    }
+    #dashboard .aqi-note {
+      font-size: 0.93em;
+      color: #b0b6c3;
+      margin-bottom: 2px;
+      margin-top: 8px;
+    }
+    @media (max-width: 600px) {
+      #dashboard { left: 0; width: 100vw; border-radius: 0; top: 0; }
+    }
+  </style>
+</head>
+<body>
+  <h2>Expecto Revealio</h2>
+  <div id="map"></div>
+  <div id="dashboard"></div>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    var map = L.map('map').setView([19.0760, 72.8777], 11);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+    }).addTo(map);
+
+    // Fetch air quality data
+    fetch('https://api.data.gov.in/resource/3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69?api-key=579b464db66ec23bdd00000146ec0d3aecf240427510dcf73a5f7ab1&format=json&limit=50&filters%5Bcountry%5D=India&filters%5Bstate%5D=Maharashtra&filters%5Bcity%5D=Mumbai')
+      .then(response => response.json())
+      .then(data => {
+        const stations = {};
+        data.records.forEach(rec => {
+          const key = rec.station;
+          if (!stations[key]) {
+            stations[key] = {
+              lat: parseFloat(rec.latitude),
+              lon: parseFloat(rec.longitude),
+              pollutants: {},
+              last_update: rec.last_update
+            };
+          }
+          stations[key].pollutants[rec.pollutant_id] = rec.avg_value;
+        });
+
+        // AQI calculation and color/category helpers
+        function getAQI(pm25) {
+          if (pm25 === null || isNaN(pm25)) return {aqi: 'NA', color: '#888', label: 'NA'};
+          if (pm25 <= 50) return {aqi: pm25, color: '#00e400', label: 'Good'};
+          if (pm25 <= 100) return {aqi: pm25, color: '#ffff00', label: 'Moderate'};
+          if (pm25 <= 150) return {aqi: pm25, color: '#ff7e00', label: 'Unhealthy for Sensitive'};
+          if (pm25 <= 200) return {aqi: pm25, color: '#ff0000', label: 'Unhealthy'};
+          if (pm25 <= 300) return {aqi: pm25, color: '#99004c', label: 'Very Unhealthy'};
+          return {aqi: pm25, color: '#7e0023', label: 'Hazardous'};
+        }
+
+        // Sidebar dashboard element
+        const dashboard = document.getElementById('dashboard');
+
+        Object.entries(stations).forEach(([station, info]) => {
+          let pm25 = null;
+          if (info.pollutants['PM2.5'] && info.pollutants['PM2.5'] !== 'NA') {
+            pm25 = parseFloat(info.pollutants['PM2.5']);
+          } else if (info.pollutants['PM10'] && info.pollutants['PM10'] !== 'NA') {
+            pm25 = parseFloat(info.pollutants['PM10']);
+          }
+          const aqiInfo = getAQI(pm25);
+
+          // Helper for pollutant bar color
+          function getPollutantBarColor(pollutant, value) {
+            if (value === undefined || value === 'NA') return '#444';
+            value = parseFloat(value);
+            if (pollutant === 'PM2.5') {
+              if (value <= 30) return '#00e400';
+              if (value <= 60) return '#ffff00';
+              if (value <= 90) return '#ff7e00';
+              if (value <= 120) return '#ff0000';
+              return '#99004c';
+            }
+            if (pollutant === 'PM10') {
+              if (value <= 50) return '#00e400';
+              if (value <= 100) return '#ffff00';
+              if (value <= 250) return '#ff7e00';
+              if (value <= 350) return '#ff0000';
+              return '#99004c';
+            }
+            // Default for others
+            return '#00bcd4';
+          }
+
+          // Pollutant icons (SVG inline)
+          const pollutantIcons = {
+            'PM2.5': `<svg width='18' height='18' viewBox='0 0 20 20'><circle cx='10' cy='10' r='8' fill='#b0b6c3'/></svg>`,
+            'PM10': `<svg width='18' height='18' viewBox='0 0 20 20'><rect x='4' y='4' width='12' height='12' rx='6' fill='#b0b6c3'/></svg>`,
+            'CO': `<svg width='18' height='18' viewBox='0 0 20 20'><ellipse cx='10' cy='10' rx='8' ry='6' fill='#b0b6c3'/></svg>`,
+            'SO2': `<svg width='18' height='18' viewBox='0 0 20 20'><polygon points='10,3 17,17 3,17' fill='#b0b6c3'/></svg>`,
+            'NO2': `<svg width='18' height='18' viewBox='0 0 20 20'><rect x='5' y='5' width='10' height='10' rx='3' fill='#b0b6c3'/></svg>`,
+            'OZONE': `<svg width='18' height='18' viewBox='0 0 20 20'><circle cx='10' cy='10' r='7' fill='none' stroke='#b0b6c3' stroke-width='3'/></svg>`
+          };
+
+          // Build dashboard-style HTML for sidebar
+          let dashHtml = `<span class='close-btn' onclick='document.getElementById("dashboard").style.display="none";'>&times;</span>`;
+          dashHtml += `<div class='station-title'>${station}</div>`;
+          dashHtml += `<div class='station-time'>${info.last_update}</div>`;
+          dashHtml += `<div class='aqi-row'>`;
+          dashHtml += `<div class='aqi-num' style='color:${aqiInfo.color};'>${aqiInfo.aqi}</div>`;
+          dashHtml += `<span class='aqi-badge' style='background:${aqiInfo.color};'>${aqiInfo.label}</span>`;
+          dashHtml += `</div>`;
+          dashHtml += `<table class='pollutant-table'>`;
+          ['PM2.5','PM10','CO','SO2','NO2','OZONE'].forEach(pollutant => {
+            if (info.pollutants[pollutant]) {
+              const val = info.pollutants[pollutant];
+              dashHtml += `<tr><td class='pollutant-label'>${pollutantIcons[pollutant] || ''}<span>${pollutant}</span></td><td style='text-align:right;'>${val}<span class='pollutant-bar' style='background:${getPollutantBarColor(pollutant, val)};width:${Math.min(80,Math.max(40,parseFloat(val)||0))}px'></span></td></tr>`;
+            }
+          });
+          dashHtml += `</table>`;
+          dashHtml += `<div class='aqi-note'>AQI is estimated from PM2.5 or PM10</div>`;
+          dashHtml += `<div class='legend'>`;
+          dashHtml += `<span style='background:#00e400;'></span>0-50`;
+          dashHtml += `<span style='background:#ffff00;'></span>51-100`;
+          dashHtml += `<span style='background:#ff7e00;'></span>101-150`;
+          dashHtml += `<span style='background:#ff0000;'></span>151-200`;
+          dashHtml += `<span style='background:#99004c;'></span>201-300`;
+          dashHtml += `<span style='background:#7e0023;'></span>301+`;
+          dashHtml += `</div>`;
+
+          // Add marker with click event to show sidebar
+          L.circleMarker([info.lat, info.lon], {
+            radius: 12,
+            color: aqiInfo.color,
+            fillColor: aqiInfo.color,
+            fillOpacity: 0.8,
+            weight: 2
+          })
+            .addTo(map)
+            .on('click', function() {
+              dashboard.innerHTML = dashHtml;
+              dashboard.style.display = 'block';
+            });
+        });
+      });
+  </script>
+</body>
+</html> 
